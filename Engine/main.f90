@@ -13,7 +13,7 @@ program main
     !real(8), parameter :: M_shell = 1e-3*M0     !Mass of the shell
 
     ! Declaration of variables
-    integer(8) :: ch_id,N_grav
+    integer(8) :: ch_id,N_grav,Sch_type
     real(8), dimension(N_b,3) :: x,v,S
     real(8), dimension(N_b) :: M
     real(8) :: t_step,t_beg,t_end,t_wr,tol_err,T1,eps,t
@@ -23,10 +23,15 @@ program main
     t_beg = 0!0.          !simulation starts at
     t = t_beg    
     call CPU_TIME(T1)
-            
+    
+    ! Check if scheme type is correct
+    if ((Sch_type.ne.1).and.(Sch_type.ne.2)) then
+        ERROR STOP "Wrong scheme type"
+    endif
+    
     !ignition system starts!
     ch_id = 0.0      
-    call init_read(N_grav,t_end,t_wr,t_step,tol_err,M,S,x,v)
+    call init_read(Sch_type,N_grav,t_end,t_wr,t_step,tol_err,M,S,x,v)
     !delete existing output file
     open(unit=222, file = f_ilename,status = "unknown",position = "APPEND")        
     close(unit=222, status = "delete")
@@ -134,11 +139,11 @@ program main
         
     endsubroutine if_wr
     
-    subroutine init_read(N_grav,t_end,t_wr,t_step,tol_err,M,S,x,v)
+    subroutine init_read(Sch_type,N_grav,t_end,t_wr,t_step,tol_err,M,S,x,v)
         implicit none
         !Read initial parameters from init.dat file
         !OUT
-        integer(8), intent(out) :: N_grav
+        integer(8), intent(out) :: N_grav,Sch_type
         real(8), intent(out) :: t_end,t_wr,t_step,tol_err
         real(8), dimension(N_b), intent(out) :: M
         real(8), dimension(N_b,3), intent(out) :: S,x,v
@@ -151,6 +156,10 @@ program main
         character (len=nlen) :: str
         !BODY
         open(unit=10,file='init.dat',status='old')
+        
+        read(10, '(A)', iostat=ios) str
+        ipos = scan(str,"=",back=.true.)
+        read (str(1+ipos:),*) Sch_type
         
         read(10, '(A)', iostat=ios) str
         ipos = scan(str,"=",back=.true.)
@@ -273,106 +282,165 @@ program main
         !INOUT
         
         !TEMP
+        real(8) :: aux1,aux2,r_ca,r_ak,r_bk
+        real(8), dimension(3) :: n_ca,n_ak,n_ka,n_bk,aux3,v_ak,v_ka
+        real(8), dimension(3) :: a_eih_k,a_so_k,a_ss_k
         real(8), dimension(3) :: H_i,g_i,v_ij,r_ij,r_kj,n_ij
         real(8), dimension(N_b) :: v2,u_aux,g_t,err_a
         real(8), dimension(3) :: R_i,U1n_i,U2n_i,Udn_i,Un_i
-        real(8), dimension(N_b,3) :: a,an
-        integer(8) :: i,j,k
+        real(8), dimension(N_b,3) :: an
+        integer(8) :: i,j,k,a,b,d
         
         !BODY
-        !set v**2 and newtone acceleration an
-        do i = 1,N_b
-            !out x = v
-            x_out(i,:) = v(i,:)
-            err_a(i) = norm_l2(x_out(i,:))
-            !v_squared
-            v2(i) = sum(v(i,:)*v(i,:))
-            an(i,:) = 0
-            do j = 1,N_grav
-                if (i.ne.j) then
-                    an(i,:) = an(i,:) - G*M(j)*(x(i,:)-x(j,:))/(norm_l2(x(i,:)-x(j,:))**3)
-                endif
+        if (Sch_type.eq.1) then
+              !set v**2 and newtone acceleration an
+            do i = 1,N_b
+                !v_squared
+                v2(i) = sum(v(i,:)*v(i,:))
+                an(i,:) = 0
+                do j = 1,N_grav
+                    if (i.ne.j) then
+                        an(i,:) = an(i,:) - G*M(j)*(x(i,:)-x(j,:))/(norm_l2(x(i,:)-x(j,:))**3)
+                    endif
+                enddo
             enddo
-        enddo
         
-        do i = 1,N_b
-            !Gravimagnetic at i
-            H_i = 0
+            do i = 1,N_b
+                !Gravimagnetic at i
+                H_i = 0
             
-            !Gravielectric at i
-            g_i = 0
+                !Gravielectric at i
+                g_i = 0
             
-            !(dg at i)/dt
-            g_t = 0
+                !(dg at i)/dt
+                g_t = 0
             
-            !Newtone potential at i
-            Un_i = 0
+                !Newtone potential at i
+                Un_i = 0
             
-            !d(previous)/dt
-            Udn_i = 0
+                !d(previous)/dt
+                Udn_i = 0
             
-            !Right hand side of EoM
-            R_i = 0
+                !Right hand side of EoM
+                R_i = 0
             
-            do j = 1,N_grav
-                if (i.ne.j) then
-                    !r_ij and n_ji = -n_ij
-                    v_ij = v(i,:) - v(j,:)
-                    r_ij = norm_l2(x(i,:)-x(j,:))
-                    n_ij = (x(i,:)-x(j,:))/r_ij
+                do j = 1,N_grav
+                    if (i.ne.j) then
+                        !r_ij and n_ji = -n_ij
+                        v_ij = v(i,:) - v(j,:)
+                        r_ij = norm_l2(x(i,:)-x(j,:))
+                        n_ij = (x(i,:)-x(j,:))/r_ij
                     
-                    !Newton potential
-                    Un_i = Un_i + M(j)/r_ij
-                    Udn_i = Udn_i - M(j)*sum(n_ij*v_ij)/(r_ij**2)
+                        !Newton potential
+                        Un_i = Un_i + M(j)/r_ij
+                        Udn_i = Udn_i - M(j)*sum(n_ij*v_ij)/(r_ij**2)
                     
-                    !Gravimagnetic field
-                    H_i = H_i + ( 4*M(j)*CP(n_ij,v(j,:))/(r_ij**2) + 2*( S(j,:) - 3*n_ij*sum(S(j,:)*n_ij) )/(r_ij**3) )*GdC
+                        !Gravimagnetic field
+                        H_i = H_i + ( 4*M(j)*CP(n_ij,v(j,:))/(r_ij**2) + 2*( S(j,:) - 3*n_ij*sum(S(j,:)*n_ij) )/(r_ij**3) )*GdC
                     
-                    !Gravielectric field
-                    !u_aux non-convinient part of g: u_aux = sum_k.ne.j M(k)/r_kj
-                    u_aux = 0
-                    do k = 1,N_grav
-                        if (j.ne.k) then
-                            u_aux = u_aux + M(k)/(norm_l2(x(j,:)-x(k,:)))
-                        endif
-                    enddo
+                        !Gravielectric field
+                        !u_aux non-convinient part of g: u_aux = sum_k.ne.j M(k)/r_kj
+                        u_aux = 0
+                        do k = 1,N_grav
+                            if (j.ne.k) then
+                                u_aux = u_aux + M(k)/(norm_l2(x(j,:)-x(k,:)))
+                            endif
+                        enddo
 					
-                    g_i = g_i - n_ij*M(j)*Gdc2/(r_ij**2)*( c2 + 2*v2(j) - 1.5*(sum(v(j,:)*n_ij))**2 -&
-                        u_aux*G - 0.5*r_ij*sum(an(j,:)*n_ij) + 6*sum(v(j,:)*CP(S(j,:),n_ij))/(M(j)*r_ij) ) +&
-							( (3*sum(n_ij*v(j,:))/(r_ij**2))*( M(j)*v(j,:) + 2*CP(S(j,:),n_ij)/(r_ij) ) +&
-								 3.5*M(j)*an(j,:)/r_ij - 4*CP(S(j,:),v(j,:))/(r_ij**3) )*Gdc2
+                        g_i = g_i - n_ij*M(j)*Gdc2/(r_ij**2)*( c2 + 2*v2(j) - 1.5*(sum(v(j,:)*n_ij))**2 -&
+                            u_aux*G - 0.5*r_ij*sum(an(j,:)*n_ij) + 6*sum(v(j,:)*CP(S(j,:),n_ij))/(M(j)*r_ij) ) +&
+							    ( (3*sum(n_ij*v(j,:))/(r_ij**2))*( M(j)*v(j,:) + 2*CP(S(j,:),n_ij)/(r_ij) ) +&
+								     3.5*M(j)*an(j,:)/r_ij - 4*CP(S(j,:),v(j,:))/(r_ij**3) )*Gdc2
                     
-                    !dg/dt for part: -[S_i x dg_i/dt]
-                    g_t = g_t + M(j)*( v_ij - 3*n_ij*sum(v_ij*n_ij) )/(r_ij**3)
+                        !dg/dt for part: -[S_i x dg_i/dt]
+                        g_t = g_t + M(j)*( v_ij - 3*n_ij*sum(v_ij*n_ij) )/(r_ij**3)
                     
-                    !spin-spin: grad of H_i's spin part: 0.5*grad(S_i*H^s_ji):
-                    R_i = R_i + ( ( 15*n_ij*sum(n_ij*S(j,:))*sum(n_ij*S(i,:)) - 3*n_ij*sum(S(i,:)*S(j,:)) -&
-						3*S(i,:)*sum(n_ij*S(j,:)) - 3*S(j,:)*sum(n_ij*S(i,:)) )/(M(i)*r_ij) +&
-							!spin-orb: gradient of non-spin H_i's part: 0.5*grad(S_i*4*(M_j/r_ij**2)*[n_ij x v_j]):
-							( -2*CP(S(i,:),v(j,:)) - 6*n_ij*sum(v(j,:)*CP(S(i,:),n_ij)) +&
-                                 !spin-orb: grad(s.[v x g]):
-								 CP(S(i,:),v(i,:))*2 + 6*n_ij*sum(v(i,:)*CP(S(i,:),n_ij)) )*M(j)/M(i) )*Gdc2/(r_ij**3)
-                endif
-            enddo
-            !Mult parts:
-            U2n_i = 1 - Un_i*Gdc2 + 1.5*v2(i)*dc2
-            U1n_i = 1 + 3*Un_i*Gdc2 + 0.5*v2(i)*dc2
+                        !spin-spin: grad of H_i's spin part: 0.5*grad(S_i*H^s_ji):
+                        R_i = R_i + ( ( 15*n_ij*sum(n_ij*S(j,:))*sum(n_ij*S(i,:)) - 3*n_ij*sum(S(i,:)*S(j,:)) -&
+						    3*S(i,:)*sum(n_ij*S(j,:)) - 3*S(j,:)*sum(n_ij*S(i,:)) )/(M(i)*r_ij) +&
+							    !spin-orb: gradient of non-spin H_i's part: 0.5*grad(S_i*4*(M_j/r_ij**2)*[n_ij x v_j]):
+							    ( -2*CP(S(i,:),v(j,:)) - 6*n_ij*sum(v(j,:)*CP(S(i,:),n_ij)) +&
+                                     !spin-orb: grad(s.[v x g]):
+								     CP(S(i,:),v(i,:))*2 + 6*n_ij*sum(v(i,:)*CP(S(i,:),n_ij)) )*M(j)/M(i) )*Gdc2/(r_ij**3)
+                    endif
+                enddo
+                !Mult parts:
+                U2n_i = 1 - Un_i*Gdc2 + 1.5*v2(i)*dc2
+                U1n_i = 1 + 3*Un_i*Gdc2 + 0.5*v2(i)*dc2
             
-            !Old parts of equation
-            !-[S_i x dg_i/dt]
-			![s_i x dg_i/dt]:
-            !Final R_i:
-            R_i = R_i + U2n_i*g_i + CP(v(i,:)/c,H_i) + CP(S(i,:)/M(i),g_t*Gdc2) - 3*Udn_i*v(i,:)*Gdc2
+                !Old parts of equation
+                !-[S_i x dg_i/dt]
+			    ![s_i x dg_i/dt]:
+                !Final R_i:
+                R_i = R_i + U2n_i*g_i + CP(v(i,:)/c,H_i) + CP(S(i,:)/M(i),g_t*Gdc2) - 3*Udn_i*v(i,:)*Gdc2
             
-            !a_i*u1ni + (a_i.v_i)*v_i/c^2 = R_i ->
-            !(a_i*v_i) = (R_i.v_i)*c^2 / (u1nic^2 + v_i^2)
+                !a_i*u1ni + (a_i.v_i)*v_i/c^2 = R_i ->
+                !(a_i*v_i) = (R_i.v_i)*c^2 / (u1nic^2 + v_i^2)
+                
+                !out x = v
+                x_out(i,:) = v(i,:)
+                err_a(i) = norm_l2(x_out(i,:))
+                !Acceleration of i-th mass with resepct to (a_i.v_i)
+                !a(i,:) = ( R_i - v(i,:)*sum(R_i*v(i,:))/(U1n_i*c2+v2(i)) )/U1n_i
+                v_out(i,:) = ( R_i - v(i,:)*sum(R_i*v(i,:))/(U1n_i*c2+v2(i)) )/U1n_i
+                !v_out(i,:) = v_out(i,:)-an(i,:)
+                !a(i,:) = ( R_i - v(i,:)*sum(R_i*v(i,:))/(U1n_i*c2+v2(i)) )/U1n_i               
+            enddo    
             
-            !Acceleration of i-th mass with resepct to (a_i.v_i)
-            !a(i,:) = ( R_i - v(i,:)*sum(R_i*v(i,:))/(U1n_i*c2+v2(i)) )/U1n_i
-            v_out(i,:) = ( R_i - v(i,:)*sum(R_i*v(i,:))/(U1n_i*c2+v2(i)) )/U1n_i
-            v_out(i,:) = v_out(i,:)-an(i,:)
-            !a(i,:) = ( R_i - v(i,:)*sum(R_i*v(i,:))/(U1n_i*c2+v2(i)) )/U1n_i
-        enddo    
+        else
+            do k = 1,3
+                a_eih_k = 0
+                a_so_k = 0
+                a_ss_k = 0
+                do a = 1,3
+                    if (a.ne.k) then                  
+                        r_ak = norm_l2(x(a,:)-x(k,:))
+                        n_ak = (x(a,:)-x(k,:))/r_ak
+                        r_ak = norm_l2(x(a,:)-x(k,:))
+                        n_ak = (x(a,:)-x(k,:))/r_ak
+                        n_ka = -n_ak
+                        v_ak = v(a,:) - v(k,:)
+                        v_ka = -v_ak
+                        
+                        do b = 1,3
+                            aux1 = 0
+                            if (b.ne.k) then
+                                r_bk = norm_l2(x(b,:)-x(k,:))
+                                aux1 = aux1 + M(b)/r_bk
+                            endif
+                        enddo
+                        aux1 = aux1*Gdc2
+                        
+                        do d = 1,3
+                            aux2 = 0
+                            aux3 = 0
+                            if (d.ne.a) then
+                                r_ca = norm_l2(x(d,:)-x(a,:))
+                                n_ca = (x(d,:)-x(a,:))/r_ca
+                                aux2 = aux2 + (M(d)/r_ca)*(1 - (r_ak/(2*r_ca))*(sum(n_ak*n_ca)))
+                                aux3 = aux3 + 3.5*n_ca*M(a)*M(d)/(r_ak*r_ca**2)
+                            endif
+                        enddo
+                        aux2 = aux2*Gdc2
+                        aux3 = aux3*(G**2)*dc2
+                        
+                        a_eih_k = a_eih_k + (M(a)*G*n_ak/r_ak**2)*(1 - 4*aux1 - aux2 + (sum(v(k,:)*v(k,:)) + 2*sum(v(a,:)*v(a,:)) &
+                            - 4*sum(v(a,:)*v(k,:)) - 1.5*sum(v(a,:)*n_ak)**2)*dc2) - (v_ak*M(a)/(r_ak**2)) &
+                                *sum(n_ak*(3*v(a,:)-4*v(k,:)))*Gdc2 + 3.5*aux3
+                        
+                        a_so_k = a_so_k + (M(a)/r_ak**3)*(6*n_ka*(sum(CP(S(a,:),n_ka)*v_ka)) + 4*CP(S(a,:),v_ka) &
+                            - 6*CP(S(a,:),n_ka)*sum(v_ka*n_ka) + 6*n_ka*(sum(CP(S(k,:),n_ka)*v_ka)) + 3*CP(S(k,:),v_ka) &
+                                - 3*CP(S(k,:),n_ka)*sum(v_ka*n_ka))*Gdc2
+                        
+                        a_ss_k = a_ss_k + (M(a)/r_ak**4)*(15*n_ak*sum(n_ka*S(k,:))*sum(n_ka*S(a,:)) - 3*n_ka*sum(S(k,:)*S(a,:)) &
+                            - 3*S(k,:)*sum(n_ka*S(a,:)) - 3*S(a,:)*sum(n_ka*S(k,:)))*Gdc2
+                    endif        
+                enddo
+                x_out(k,:) = v(k,:)
+                err_a(k) = norm_l2(x_out(k,:))
+                v_out(k,:) = a_eih_k + a_so_k + a_ss_k
+            enddo          
+        endif
         err = MAXVAL(err_a)
     endsubroutine r_h
         
