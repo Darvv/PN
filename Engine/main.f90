@@ -282,8 +282,8 @@ program main
         !INOUT
         
         !TEMP
-        real(8) :: aux1,aux2,r_ca,r_ak,r_bk
-        real(8), dimension(3) :: n_ca,n_ak,n_ka,n_bk,aux3,v_ak,v_ka
+        real(8) :: aux1,aux2,r_da,r_ak,r_bk
+        real(8), dimension(3) :: n_da,n_ak,n_ka,n_bk,aux3,v_ak,v_ka
         real(8), dimension(3) :: a_eih_k,a_so_k,a_ss_k
         real(8), dimension(3) :: H_i,g_i,v_ij,r_ij,r_kj,n_ij
         real(8), dimension(N_b) :: v2,u_aux,g_t,err_a
@@ -415,10 +415,10 @@ program main
                             aux2 = 0
                             aux3 = 0
                             if (d.ne.a) then
-                                r_ca = norm_l2(x(d,:)-x(a,:))
-                                n_ca = (x(d,:)-x(a,:))/r_ca
-                                aux2 = aux2 + (M(d)/r_ca)*(1 - (r_ak/(2*r_ca))*(sum(n_ak*n_ca)))
-                                aux3 = aux3 + 3.5*n_ca*M(a)*M(d)/(r_ak*r_ca**2)
+                                r_da = norm_l2(x(d,:)-x(a,:))
+                                n_da = (x(d,:)-x(a,:))/r_da
+                                aux2 = aux2 + (M(d)/r_da)*(1 - (r_ak/(2*r_da))*(sum(n_ak*n_da)))
+                                aux3 = aux3 + 3.5*n_da*M(a)*M(d)/(r_ak*r_da**2)
                             endif
                         enddo
                         aux2 = aux2*Gdc2
