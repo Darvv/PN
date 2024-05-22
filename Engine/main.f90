@@ -20,7 +20,8 @@ program main
 
     ! Some preparations
     eps = EPSILON(pi)
-    t_beg = 0!0.          !simulation starts at
+    !simulation starts at
+    t_beg = 0!0.          
     t = t_beg    
     call CPU_TIME(T1)
     
@@ -446,7 +447,6 @@ program main
         
     subroutine check_clock(T)
         implicit none
-        !Cross croduct of v_1 and v_2
         !IN
         real(8), intent(inout) :: T
         !OUT
@@ -465,13 +465,13 @@ program main
         write(*,*) 'Elaped',h,'(h)',m,'(m)',s,'(s)'
     end subroutine check_clock
     
-  	function CP(v_1, v_2) result (v_out)
-		implicit none
-        !Cross croduct of v_1 and v_2
-		real(8), dimension(3), intent(in) :: v_1,v_2
-		real(8), dimension(3) :: v_out
-		!body
-		v_out(1) = v_1(2)*v_2(3)-v_1(3)*v_2(2)
+    function CP(v_1, v_2) result (v_out)
+	implicit none
+        !Cross product of v_1 and v_2
+	real(8), dimension(3), intent(in) :: v_1,v_2
+	real(8), dimension(3) :: v_out
+	!body
+	v_out(1) = v_1(2)*v_2(3)-v_1(3)*v_2(2)
         v_out(2) = v_1(3)*v_2(1)-v_1(1)*v_2(3)
         v_out(3) = v_1(1)*v_2(2)-v_1(2)*v_2(1)
     end function
