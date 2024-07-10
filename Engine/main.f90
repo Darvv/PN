@@ -1,7 +1,7 @@
 program main   
     implicit none
     ! Parameters and functions for main
-    real(8), parameter :: N_b = 3               !Number of bodies
+    integer(8), parameter :: N_b = 2               !Number of bodies
     real(8), parameter :: pi = 3.1415926
     real(8), parameter :: G = 6.67259e-8        !gravitational constant (cm3/g/s2)
     real(8), parameter :: C = 2.998e10          !speed of light (cm/s)
@@ -20,16 +20,10 @@ program main
 
     ! Some preparations
     eps = EPSILON(pi)
-    !simulation starts at
-    t_beg = 0!0.          
+    t_beg = 0!0.          !simulation starts at
     t = t_beg    
     call CPU_TIME(T1)
-    
-    ! Check if scheme type is correct
-    if ((Sch_type.ne.1).and.(Sch_type.ne.2)) then
-        ERROR STOP "Wrong scheme type"
-    endif
-    
+        
     !ignition system starts!
     ch_id = 0.0      
     call init_read(Sch_type,N_grav,t_end,t_wr,t_step,tol_err,M,S,x,v)
@@ -37,7 +31,13 @@ program main
     open(unit=222, file = f_ilename,status = "unknown",position = "APPEND")        
     close(unit=222, status = "delete")
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
+    
+    ! Check if scheme type is correct
+    if ((Sch_type.ne.1).and.(Sch_type.ne.2)) then
+        write(*,*) "Wrong scheme type"
+        ERROR STOP
+    endif
+     
     !Write initial stat
     call checkpoint_wr(x,v,t,t_step)
     call step(x,v,t,t_step)
@@ -110,9 +110,11 @@ program main
             mins = NINT((T_curr-secs)/60.0)
             hours = NINT((mins-mod(mins,60))/60.0)
             mins = mod(mins,60)
-            write(*,*) 100*REAL(ch_id,8)
+            
+            !write(*,*) 100*REAL(ch_id,8)
             write(*,*) 'Progress:',100*REAL(ch_id,8)/REAL(CEILING(t_end/t_wr),8),'%',', current t_step = ',t_step
             write(*,'(A,I3,A4,I2,A5,F4.1,A3)') 'Elaped time:',hours,'(h);',mins,'(m); ',secs,'(s)'
+            
         endif
         close(222)       
 
@@ -244,7 +246,8 @@ program main
             call r_h(x5,v5,t+h,x - x1*17/12 + x2*27/4 - x3*27/5 + x4*16/15,v - v1*17/12 + v2*27/4 - v3*27/5 + v4*16/15,k5_err)
             x5 = x5*h
             v5 = v5*h
-            call r_h(x6,v6,t+h*5/6,x + x1*65/432 - x2*5/16 + x3*13/16 + x4*4/27 + x5*5/144,v + v1*65/432 - v2*5/16 + v3*13/16 + v4*4/27 + v5*5/144,k6_err)
+            call r_h(x6,v6,t+h*5/6,x + x1*65/432 - x2*5/16 + x3*13/16 + x4*4/27 + x5*5/144,v + v1*65/432 - v2*5/16 + v3*13/16 &
+				&+ v4*4/27 + v5*5/144,k6_err)
             x6 = x6*h
             v6 = v6*h
             !k6_err = h*(-k1_err*1/150 + 0 + k3_err*3/100 - k4_err*16/75 - k5_err*1/20 + k6_err*6/25)
@@ -283,11 +286,11 @@ program main
         !INOUT
         
         !TEMP
-        real(8) :: aux1,aux2,r_da,r_ak,r_bk
+        real(8) :: aux1,aux2,r_da,r_ak,r_bk,r_ij,u_aux
         real(8), dimension(3) :: n_da,n_ak,n_ka,n_bk,aux3,v_ak,v_ka
         real(8), dimension(3) :: a_eih_k,a_so_k,a_ss_k
-        real(8), dimension(3) :: H_i,g_i,v_ij,r_ij,r_kj,n_ij
-        real(8), dimension(N_b) :: v2,u_aux,g_t,err_a
+        real(8), dimension(3) :: H_i,g_i,v_ij,n_ij,g_t
+        real(8), dimension(N_b) :: v2,err_a
         real(8), dimension(3) :: R_i,U1n_i,U2n_i,Udn_i,Un_i
         real(8), dimension(N_b,3) :: an
         integer(8) :: i,j,k,a,b,d
@@ -349,9 +352,9 @@ program main
                         enddo
 					
                         g_i = g_i - n_ij*M(j)*Gdc2/(r_ij**2)*( c2 + 2*v2(j) - 1.5*(sum(v(j,:)*n_ij))**2 -&
-                            u_aux*G - 0.5*r_ij*sum(an(j,:)*n_ij) + 6*sum(v(j,:)*CP(S(j,:),n_ij))/(M(j)*r_ij) ) +&
-							    ( (3*sum(n_ij*v(j,:))/(r_ij**2))*( M(j)*v(j,:) + 2*CP(S(j,:),n_ij)/(r_ij) ) +&
-								     3.5*M(j)*an(j,:)/r_ij - 4*CP(S(j,:),v(j,:))/(r_ij**3) )*Gdc2
+                           & u_aux*G - 0.5*r_ij*sum(an(j,:)*n_ij) + 6*sum(v(j,:)*CP(S(j,:),n_ij))/(M(j)*r_ij) ) +&
+							    & ( (3*sum(n_ij*v(j,:))/(r_ij**2))*( M(j)*v(j,:) + 2*CP(S(j,:),n_ij)/(r_ij) ) +&
+									& 3.5*M(j)*an(j,:)/r_ij - 4*CP(S(j,:),v(j,:))/(r_ij**3) )*Gdc2
                     
                         !dg/dt for part: -[S_i x dg_i/dt]
                         g_t = g_t + M(j)*( v_ij - 3*n_ij*sum(v_ij*n_ij) )/(r_ij**3)
@@ -389,21 +392,19 @@ program main
             enddo    
             
         else
-            do k = 1,3
+            do k = 1,N_b
                 a_eih_k = 0
                 a_so_k = 0
                 a_ss_k = 0
-                do a = 1,3
+                do a = 1,N_grav
                     if (a.ne.k) then                  
-                        r_ak = norm_l2(x(a,:)-x(k,:))
-                        n_ak = (x(a,:)-x(k,:))/r_ak
                         r_ak = norm_l2(x(a,:)-x(k,:))
                         n_ak = (x(a,:)-x(k,:))/r_ak
                         n_ka = -n_ak
                         v_ak = v(a,:) - v(k,:)
                         v_ka = -v_ak
                         
-                        do b = 1,3
+                        do b = 1,N_grav
                             aux1 = 0
                             if (b.ne.k) then
                                 r_bk = norm_l2(x(b,:)-x(k,:))
@@ -412,7 +413,7 @@ program main
                         enddo
                         aux1 = aux1*Gdc2
                         
-                        do d = 1,3
+                        do d = 1,N_grav
                             aux2 = 0
                             aux3 = 0
                             if (d.ne.a) then
@@ -447,6 +448,7 @@ program main
         
     subroutine check_clock(T)
         implicit none
+        !Cross croduct of v_1 and v_2
         !IN
         real(8), intent(inout) :: T
         !OUT
@@ -465,13 +467,13 @@ program main
         write(*,*) 'Elaped',h,'(h)',m,'(m)',s,'(s)'
     end subroutine check_clock
     
-    function CP(v_1, v_2) result (v_out)
-	implicit none
-        !Cross product of v_1 and v_2
-	real(8), dimension(3), intent(in) :: v_1,v_2
-	real(8), dimension(3) :: v_out
-	!body
-	v_out(1) = v_1(2)*v_2(3)-v_1(3)*v_2(2)
+  	function CP(v_1, v_2) result (v_out)
+		implicit none
+        !Cross croduct of v_1 and v_2
+		real(8), dimension(3), intent(in) :: v_1,v_2
+		real(8), dimension(3) :: v_out
+		!body
+		v_out(1) = v_1(2)*v_2(3)-v_1(3)*v_2(2)
         v_out(2) = v_1(3)*v_2(1)-v_1(1)*v_2(3)
         v_out(3) = v_1(1)*v_2(2)-v_1(2)*v_2(1)
     end function
